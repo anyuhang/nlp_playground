@@ -141,7 +141,7 @@ print(label_train.shape, label_test.shape)
 
 print(len(X_train_data), len(y_train_label), len(X_test_data), len(y_test_label))
 
-# working model
+# word2vec model
 model = Sequential()
 embedding_layer_word = Embedding(input_dim=VOCAB_SIZE, output_dim=EMBEDDING_DIM, input_length=SEQUENCE_LENGTH,W_constraint=unitnorm(axis=1))
 model.add(embedding_layer_word)
@@ -150,7 +150,7 @@ model.add(Dense(PA_CAT, activation='softmax'))
 model.compile(loss='categorical_crossentropy', optimizer='rmsprop', metrics=['acc'])
 model.fit(X_train_data, label_train, validation_data=(X_test_data, label_test),nb_epoch=1, batch_size=128)
 
-# model
+# doc2vec model
 DOC_SIZE = len(doc_index)
 word_emb = Sequential()
 embedding_layer_word = Embedding(input_dim=VOCAB_SIZE, output_dim=EMBEDDING_DIM, input_length=SEQUENCE_LENGTH)
