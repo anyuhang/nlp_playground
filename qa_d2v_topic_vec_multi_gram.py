@@ -25,6 +25,8 @@ from nlp_utility import *
 kw_file = '/Users/yan/Code/avvo_nlp/qa_toad_kw.csv'
 fn = '/Users/yan/qa-classifier/qa_recom_refQuestions.csv'
 fn_test = '/Users/yan/qa-classifier/qa_recom_orig_min.csv'
+
+kw_file = '/home/ec2-user/src/corpus/questions.csv'
 '''
 ## AWS version
 kw_file = 'qa_toad_kw.csv'
@@ -82,6 +84,8 @@ for i in sen:
         i.append(pa_dict[i[1]])
     else:
         i.append(50)
+
+index_pa = dict(zip(pa_dict.values(), pa_dict.keys()))
 
 # configuration
 np.random.seed(1337)
@@ -142,7 +146,7 @@ x = MaxPooling1D(5)(x)
 Dropout(0.2)
 BatchNormalization()
 x = Conv1D(128, 5, activation='relu')(x)
-x = MaxPooling1D(35)(x)  # global max pooling
+x = MaxPooling1D(27)(x)  # global max pooling
 Dropout(0.2)
 BatchNormalization()
 x = Flatten()(x)
@@ -150,7 +154,7 @@ x = Dense(128, activation='relu')(x)
 preds = Dense(label_train.shape[1], activation='softmax')(x)
 model = Model(sequence_input, preds)
 model.compile(loss='categorical_crossentropy', optimizer='rmsprop', metrics=['acc'])
-model.fit(X_train_data_arr, label_train, validation_data=(X_test_data_arr, label_test),epochs=1, batch_size=128)
+model.fit(X_train_data_arr, label_train, validation_data=(X_test_data_arr, label_test),epochs=3, batch_size=128)
 model.save_weights('ft1.h5')
 
 # fewer layers
@@ -167,13 +171,16 @@ model = Model(sequence_input, preds)
 model.compile(loss='categorical_crossentropy', optimizer='rmsprop', metrics=['acc'])
 model.fit(X_train_data_arr, label_train, validation_data=(X_test_data_arr, label_test),epochs=3, batch_size=128)
 
+pred_output = model.predict((X_test_data_arr, batch_size=128)
+
+
 # combined layers
 sequence_input = Input(shape=(MAX_SEQUENCE_LENGTH,), dtype='int32')
 embedding_layer_word = Embedding(input_dim=VOCAB_SIZE, output_dim=EMBEDDING_DIM, input_length=MAX_SEQUENCE_LENGTH,embeddings_constraint=unitnorm(axis=1))
 Dropout (0.2)
 embedded_sequences = embedding_layer_word(sequence_input)
 convs = [ ]
-for fsz in range (2, 5):
+for fsz in range (3, 6):
     c = Conv1D(64, fsz, border_mode='same', activation="relu")(embedded_sequences)
     c = MaxPooling1D()(c)
     c = Flatten()(c)
@@ -188,55 +195,138 @@ model = Model(sequence_input, preds)
 model.compile(loss='categorical_crossentropy',optimizer='rmsprop',metrics=['acc'])
 model.fit(X_train_data_arr, label_train, validation_data=(X_test_data_arr, label_test),epochs=3, batch_size=128)
 
+###
+from sklearn.manifold import TSNE
+from matplotlib import pylab
+num_points = 400
+tsne = TSNE(perplexity=30, n_components=2, init='pca', n_iter=5000)
+two_d_embeddings = tsne.fit_transform(em_word[500:num_points+500, :])
+def plot(embeddings, labels):
+  assert embeddings.shape[0] >= len(labels), 'More labels than embeddings'
+  pylab.figure(figsize=(15,15))  # in inches
+  for i, label in enumerate(labels):
+    x, y = embeddings[i,:]
+    pylab.scatter(x, y)
+    pylab.annotate(label, xy=(x, y), xytext=(5, 2), textcoords='offset points',
+                   ha='right', va='bottom')
+  pylab.show()
 
-# tensorfow version
-VOCAB_SIZE = len(dictionary)
-EMBEDDING_DIM = 64
-PA_CAT = 51
-MAX_SEQUENCE_LENGTH = 1000
-batch_size = 128
-depth = 16
-num_hidden = 64
+words = [reverse_dictionary[i] for i in range(500, num_points+500)]
+plot(two_d_embeddings, words)
+np.save('tsne_2d', two_d_embeddings)
+two_d_embeddings=np.load('tsne_2d.npy')
 
-graph = tf.Graph()
+import csv
+with open("tsne_words.csv", "w") as f:
+    wr = csv.writer(f,delimiter="\n")
+    wr.writerow(words)
 
-with graph.as_default():
+import csv
+with open('tsne_words.csv', 'rb') as f:
+    reader = csv.reader(f)
+    words = list(reader)
 
-  # Input data.
-  tf_train_dataset = tf.placeholder(tf.float32, shape=(batch_size, MAX_SEQUENCE_LENGTH, EMBEDDING_DIM))
-  tf_train_labels = tf.placeholder(tf.float32, shape=(batch_size, 1, 51))
-  tf_valid_dataset = tf.placeholder(tf.float32, shape=(batch_size, MAX_SEQUENCE_LENGTH, EMBEDDING_DIM))
-  tf_test_dataset = tf.placeholder(tf.float32, shape=(batch_size, 1, 51))
+for i in words:
+    word.extend(i)
 
-  # Variables.
-  embeddings = tf.Variable(tf.random_uniform([VOCAB_SIZE, EMBEDDING_DIM], -1.0, 1.0))
-  weights = tf.Variable(tf.truncated_normal([VOCAB_SIZE, EMBEDDING_DIM],stddev=1.0 / math.sqrt(EMBEDDING_DIM)))
-  biases = tf.Variable(tf.zeros([VOCAB_SIZE]))
+plot(two_d_embeddings, word)
+### check results by PA categories
+### y_train_label is true label; y_hat is [rows, 51] matrix
+https://stackoverflow.com/questions/6910641/how-to-get-indices-of-n-maximum-values-in-a-numpy-array
+https://stackoverflow.com/questions/30332908/n-largest-values-in-each-row-of-ndarray -- good
+https://stackoverflow.com/questions/6252280/find-the-most-frequent-number-in-a-numpy-vector -- bin count
+y_hat = model.predict(X_train_data_arr, batch_size=128)
+>>> y_hat_idx = y_hat.argmax(axis=1)
+>>> y_hat_idx.shape
+(115616,)
+>>> y_hat_idx[:4]
+array([50,  0,  4,  9])
+>>> y = np.asarray(y_train_label)
+>>> y.shape
+(115616,)
+>>> y[:4]
+array([50,  2,  2, 34])
+>>> y_cat=np.where(y==50)
+>>> y_hat_idx[y_cat[0]][:10]
+array([50,  2, 50,  5, 50, 50, 50,  9, 50, 50])
+>>> len(y_hat_idx[y_cat[0]])
+6105
+>>> sum(y_hat_idx[y_cat[0]]==50)
+3366
+>>> a = np.array([9, 4, 4, 3, 3, 10, 0, 4, 6, 0])
+>>> ind = np.argpartition(a, -4)[-4:]
+>>> ind
+array([1, 5, 8, 0])
+>>> a[ind]
+array([4, 9, 6, 9])
+>>> ind[np.argsort(a[ind])]
+array([1, 8, 5, 0])
+>>> ind[np.argsort(a[ind])][::-1]
+array([0, 5, 8, 1])
 
-  embed = tf.zeros([batch_size, EMBEDDING_DIM])
-  for j in range(1000):
-    embed += tf.nn.embedding_lookup(embeddings, train_dataset[:, j])
-    embed = embed
+from numpy import linalg as LA
+a = np.array([[0, 3, 4, 2, 5],
+              [4, 2, 6, 3, 1],
+              [2, 1, 1, 8, 8],
+              [6, 6, 3, 2, 6]])
+a_norm = LA.norm(a, axis=1)
+a_n = a / a_norm.reshape((a.shape[0],1))
+>>> sorted_row_idx = np.argsort(a, axis=1)[:,2::]
+>>> sorted_row_idx
+array([[1, 2, 4],
+       [3, 0, 2],
+       [0, 3, 4],
+       [0, 1, 4]])
+sorted_row_idx = np.argsort(a_n, axis=1)[:,-2::][:,::-1]
+sorted_row_idx
+array([[4, 2, 1],
+       [2, 0, 3],
+       [4, 3, 0],
+       [4, 1, 0]])
 
-  # Model.
-  def model(data):
-    conv = tf.nn.conv2d(data, layer1_weights, [1, 2, 2, 1], padding='SAME')
-    conv = tf.nn.conv1d(data, filters=128, stride=5, padding='SAME')
-    hidden = tf.nn.relu(conv + layer1_biases)
-    shape = hidden.get_shape().as_list()
-    reshape = tf.reshape(hidden, [shape[0], shape[1] * shape[2] * shape[3]])
-    hidden = tf.nn.relu(tf.matmul(reshape, layer3_weights) + layer3_biases)
-    return tf.matmul(hidden, layer4_weights) + layer4_biases
+a=np.array([[ 5,  4,  3,  2,  1],
+            [10,  9,  8,  7,  6]])
+b=np.argpartition(a,3)
+b[:,-3:][:,::-1]
+array([[0, 1, 2],
+       [0, 1, 2]])
 
-  # Training computation.
-  logits = model(tf_train_dataset)
-  loss = tf.reduce_mean(
-    tf.nn.softmax_cross_entropy_with_logits(labels=tf_train_labels, logits=logits))
 
-  # Optimizer.
-  optimizer = tf.train.GradientDescentOptimizer(0.05).minimize(loss)
+## top 1 prediction
+acc_list = []
+for i in xrange(51):
+    y_cat=np.where(y==i)
+    acc_list.append([i, len(y_cat[0]), sum(y_hat_idx[y_cat[0]]==i),
+    float(sum(y_hat_idx[y_cat[0]]==i))/max(len(y_cat[0]),1)])
 
-  # Predictions for the training, validation, and test data.
-  train_prediction = tf.nn.softmax(logits)
-  valid_prediction = tf.nn.softmax(model(tf_valid_dataset))
-  test_prediction = tf.nn.softmax(model(tf_test_dataset))
+for i in acc_list:
+    print(index_pa[i[0]], i[1], i[2], i[3])
+
+## top 3 predictions
+y_hat_2 = np.sort(y_hat, axis=1)[:,-2::][:,::-1]
+y_hat_idx_2 = np.argsort(y_hat, axis=1)[:,-2::][:,::-1]
+acc_list = []
+for i in xrange(51):
+i = 6
+y_cat=np.where(y==i)
+row_idx = y_cat[0]
+num_rows = row_idx.shape[0]
+count = np.bincount(y_hat_idx_2[row_idx,0])
+
+y_hat[row_idx,0]
+acc_list.append([i, index_pa[i],
+# find top 3 largest customer_category
+# find top 3 largest customer_category count
+np.argsort(-count)[:3],
+-np.sort(-count)[:3],
+# first pred is correct
+sum(y_hat_idx_2[row_idx,0]==i),
+# second pred is correct
+sum(y_hat_idx_2[row_idx,1]==i),
+# first pred correct pct
+float(sum(y_hat_idx_2[row_idx,0]==i))/max(num_rows,1),
+# second pred correct pct
+float(sum(y_hat_idx_2[row_idx,1]==i))/max(num_rows,1)])
+
+for i in acc_list:
+    print(i)
